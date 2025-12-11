@@ -1,0 +1,177 @@
+import numpy as np
+import matplotlib.pyplot as plt
+def tov(t,p,m):
+    c=0.121467
+    anr=2.4216
+    ar=2.8663
+    epsilon=anr*p**(0.6)+ar*p
+    dp=-(epsilon+p)*(m+c*t**3*p)*(t**2-2*m*t)**(-1)
+    dm=c*t**2*epsilon
+    return np.array([dp,dm])
+
+
+##R-K 4
+def M_R(p0):
+    nt=3000
+    dt=0.01
+    t0=0.01
+    data=np.zeros((nt+1,2))
+    data[0,0]=p0
+    data[0,1]=1e-10
+    
+    k0=np.array([0,0])
+    k1=np.array([0,0])
+    k2=np.array([0,0])
+    k3=np.array([0,0])
+    
+    for i in range(0,nt-1):
+            
+            t=t0+dt*i
+            k0=tov(t,data[i,0],data[i,1])*dt
+            k1=tov(t+dt/2,data[i,0]+k0[0]/2,data[i,1]+k0[1]/2)*dt
+
+            k2=tov(t+dt/2,data[i,0]+k1[0]/2,data[i,1]+k1[1]/2)*dt
+
+            k3=tov(t+dt/2,data[i,0]+k2[0]/2,data[i,1]+k2[1]/2)*dt
+  
+            data[i+1,0]=data[i,0]+(k0[0]+2*k1[0]+2*k2[0]+k3[0])/6
+            data[i+1,1]=data[i,1]+(k0[1]+2*k1[1]+2*k2[1]+k3[1])/6
+            
+            if np.real(data[i+1,0])<1e-8:            
+                break
+    
+    return([(t0+dt*i)*1.476,data[i,1]])
+
+a=np.linspace(0.0001,0.01,100)
+b=np.linspace(0.01,1,100)
+c=np.linspace(1,100,100)
+d=np.linspace(100,10000,100)
+
+p0array=np.append(a,b)
+p0array=np.append(p0array,c)
+p0array=np.append(p0array,d)
+
+r_mass=np.zeros((400,2))
+
+for i,p0 in enumerate(p0array):
+    r_mass[i]=M_R(p0)
+
+
+
+plt.figure()
+plt.plot(r_mass[:,0],r_mass[:,1])
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 设置常量
+c = 0.121467
+anr = 2.4216
+ar = 2.8663
+
+# 状态方程
+def eos(p):
+    epsilon = anr * p ** (3 / 5) + ar * p
+    return epsilon
+
+# 定义带初始条件的PINN网络
+class TOV_PINN_with_IC(tf.keras.Model):
+    def __init__(self):
+        super(TOV_PINN_with_IC, self).__init__()
+        # 创建隐藏层
+        self.dense1 = tf.keras.layers.Dense(20, activation='tanh')
+        self.dense2 = tf.keras.layers.Dense(20, activation='tanh')
+        self.dense3 = tf.keras.layers.Dense(20, activation='tanh')
+        # 输出层：对于非初始点的数据使用 softplus 激活函数
+        self.dense4 = tf.keras.layers.Dense(2, activation='softplus')
+
+    def call(self, r):
+        x = self.dense1(r)
+        x = self.dense2(x)
+        x = self.dense3(x)
+        output = self.dense4(x)
+        
+        # 初始点的硬编码约束
+        initial_p = 10.0  # 固定初始压强
+        initial_m = 1e-10 # 固定初始质量
+        
+        # 将初始点固定为所需值，其他点按网络输出
+        initial_condition = tf.constant([[initial_p, initial_m]], dtype=tf.float32)
+        output_with_ic = tf.concat([initial_condition, output[1:]], axis=0)
+        
+        return output_with_ic
+
+# 损失函数：包括TOV方程的约束
+def compute_loss(model, r):
+    # 在r=0附近的初始点
+    r_initial = tf.constant([[0.01]], dtype=tf.float32)
+
+    with tf.GradientTape(persistent=True) as tape:
+        tape.watch(r)
+        output = model(r)
+        p, m = output[:, 0:1], output[:, 1:2]
+        
+        # 计算epsilon
+        epsilon = eos(p)
+        
+        # 自动微分计算 dp/dr 和 dm/dr
+        dp_dr = tape.gradient(p, r)
+        dm_dr = tape.gradient(m, r)
+        
+        # TOV方程中的误差
+        tov_eq1 = dp_dr + (epsilon + p) * (m + c * r ** 3 * p) / (r ** 2 - 2 * m * r)
+        tov_eq2 = dm_dr - c * r ** 2 * epsilon
+
+        # 定义损失函数，包含TOV方程的约束
+        loss_tov = tf.reduce_mean(tf.square(tov_eq1)) + tf.reduce_mean(tf.square(tov_eq2))
+    
+    return loss_tov
+
+# 训练PINN
+def train_pinn(model, epochs=1000, learning_rate=1e-3):
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    r_train = tf.convert_to_tensor(np.linspace(0.01, 10, 100).reshape(-1, 1), dtype=tf.float32)
+    
+    for epoch in range(epochs):
+        with tf.GradientTape() as tape:
+            loss = compute_loss(model, r_train)
+        
+        grads = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(grads, model.trainable_variables))
+        
+        if epoch % 100 == 0:
+            print(f"Epoch {epoch}: Loss = {loss.numpy()}")
+
+# 初始化模型并训练
+model = TOV_PINN_with_IC()
+train_pinn(model)
+
+# 可视化质量-半径关系
+r_test = np.linspace(0.01, 15, 100).reshape(-1, 1).astype(np.float32)
+predictions = model.predict(r_test)
+p_pred, m_pred = predictions[:, 0], predictions[:, 1]
+
+plt.figure(figsize=(8, 6))
+plt.plot(r_test, m_pred, label="Predicted Mass (PINN with Initial Constraint)")
+plt.xlabel("Radius (km)")
+plt.ylabel("Mass (M☉)")
+plt.title("Neutron Star Mass-Radius Relation (Using PINN with Initial Constraint)")
+plt.legend()
+plt.grid()
+plt.show()
+
+
