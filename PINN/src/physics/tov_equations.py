@@ -14,18 +14,20 @@ from . import eos
 c = 0.121467
 
 # 初始条件参数
-INITIAL_P = 10.0  # 初始压强（中心压强）
+INITIAL_P = 0.01  # 初始压强（中心压强）
 INITIAL_M = 1e-10  # 初始质量（接近0）
 R_INITIAL = 0.01  # 初始半径
 
 # 损失函数：包括TOV方程的约束和初始条件
-def compute_loss(model, r):
+def compute_loss(model, r, use_soft_constraint=False, ic_weight=1000.0):
     """
     计算PINN的损失函数
     
     参数:
     model: PINN模型
     r: 训练点半径，形状为 (n_points, 1)
+    use_soft_constraint: 是否使用软约束（如果模型是TOV_PINN_with_Soft_IC，应设为True）
+    ic_weight: 初始条件损失的权重（仅在use_soft_constraint=True时使用）
     
     返回:
     loss: 总损失值
@@ -64,7 +66,28 @@ def compute_loss(model, r):
         # TOV方程的损失
         loss_tov = tf.reduce_mean(tf.square(tov_eq1)) + tf.reduce_mean(tf.square(tov_eq2))
         
-        # 注意：初始条件已经在模型中通过硬约束实现（见tov_pinn.py）
-        # 这里只需要TOV方程的损失即可
-    
-    return loss_tov
+        # 根据约束类型处理初始条件
+        if use_soft_constraint:
+            # 软约束：通过损失函数约束初始条件
+            r_flat = tf.reshape(r, [-1])
+            is_initial = tf.abs(r_flat - model.r_initial) < 1e-6
+            
+            if tf.reduce_any(is_initial):
+                # 获取初始点的预测值
+                initial_indices = tf.where(is_initial)
+                p_initial = tf.gather_nd(p, initial_indices)
+                m_initial = tf.gather_nd(m, initial_indices)
+                
+                # 初始条件损失
+                loss_ic = ic_weight * (
+                    tf.reduce_mean(tf.square(p_initial - model.initial_p)) +
+                    tf.reduce_mean(tf.square(m_initial - model.initial_m))
+                )
+            else:
+                loss_ic = 0.0
+            
+            return loss_tov + loss_ic
+        else:
+            # 硬约束：初始条件通过模型中的硬约束精确满足（仅在初始点）
+            # 这里只需要TOV方程的损失即可
+            return loss_tov
