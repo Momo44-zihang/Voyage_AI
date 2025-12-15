@@ -10,7 +10,7 @@ Created on Wed Dec 10 17:06:15 2025
 import tensorflow as tf
 
 # 状态方程参数
-anr = 2.4216
+anr = 2.4216  
 ar = 2.8663
 
 def eos(p):
