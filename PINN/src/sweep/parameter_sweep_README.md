@@ -17,7 +17,7 @@
 ### 基本使用
 
 ```python
-from parameter_sweep import ParameterSweep
+from PINN.src.sweep.parameter_sweep import ParameterSweep
 
 # 创建扫描器
 sweep = ParameterSweep(
@@ -41,8 +41,8 @@ param_grid = {
 results = sweep.sweep(
     param_grid=param_grid,
     epochs=1000,  # 每个配置的训练轮数
-    save_results=True,
-    output_dir='sweep_results'
+    save_results=True
+    # output_dir 使用默认值（PINN/sweep_results，与 src/ 并列）
 )
 ```
 
@@ -139,7 +139,7 @@ results = sweep.sweep(param_grid=param_combinations, epochs=1000)
 
 ## 输出文件
 
-扫描完成后，会在 `output_dir` 目录下生成：
+扫描完成后，会在 `output_dir` 目录下生成（默认：`PINN/sweep_results/`，与 `src/` 并列）：
 
 1. **results.json**: 所有实验结果的JSON文件
 2. **report.txt**: 文本格式的报告，包含：

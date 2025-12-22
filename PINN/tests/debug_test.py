@@ -29,11 +29,12 @@ except Exception as e:
 
 try:
     print("\n3. 测试导入PINN模块...")
-    # 添加父目录到路径
+    # 添加父目录到路径（从 tests/ 到项目根目录需要向上三级）
     import os
-    parent_dir = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.dirname(parent_dir))
-    print(f"   添加路径: {os.path.dirname(parent_dir)}")
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(current_dir))  # tests -> PINN -> Voyage_AI
+    sys.path.insert(0, parent_dir)
+    print(f"   添加路径: {parent_dir}")
     
     from PINN.src.models import tov_pinn
     print("   ✓ 成功导入 tov_pinn")

@@ -20,7 +20,8 @@ import pandas as pd
 
 # 添加父目录到路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
+# 从 src/sweep/ 到项目根目录需要向上两级
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
@@ -31,6 +32,7 @@ except ImportError:
     pass
 
 from PINN.src.models import tov_pinn
+from PINN.src.models.tov_pinn_soft import TOV_PINN_with_Soft_IC
 from PINN.src.training import train
 from PINN.src.physics import tov_equations
 
@@ -57,7 +59,7 @@ class ParameterSweep:
     def create_model(self, use_soft_constraint):
         """创建模型"""
         if use_soft_constraint:
-            return tov_pinn.TOV_PINN_with_Soft_IC(
+            return TOV_PINN_with_Soft_IC(
                 initial_p=self.initial_p,
                 initial_m=self.initial_m,
                 r_initial=self.r_initial
@@ -201,14 +203,44 @@ class ParameterSweep:
         density_strategy = params.get('density_strategy', 'uniform')
         density_params = params.get('density_params', None)
         
-        if density_strategy == 'uniform' and density_params is not None:
+        # 如果提供了独立的 center_weight 和 center_region 参数
+        has_center_weight = 'center_weight' in params
+        has_center_region = 'center_region' in params
+        
+        if has_center_weight or has_center_region:
+            if density_strategy == 'center_focused':
+                # 对于 center_focused，组合成 density_params
+                center_weight = params.pop('center_weight', 3.0)  # 从params中移除，避免重复
+                center_region = params.pop('center_region', 0.15)
+                # 如果已经提供了 density_params，合并参数（独立参数优先）
+                if density_params is None or not isinstance(density_params, dict):
+                    density_params = {}
+                density_params['center_weight'] = center_weight
+                density_params['center_region'] = center_region
+            else:
+                # 如果不是 center_focused，忽略这些参数
+                params.pop('center_weight', None)
+                params.pop('center_region', None)
+        
+        # 根据 density_strategy 设置最终的 density_params
+        if density_strategy == 'uniform':
             params['density_params'] = None  # uniform不需要参数
-        elif density_strategy == 'center_focused' and density_params is None:
-            params['density_params'] = {'center_weight': 3.0, 'center_region': 0.15}  # 默认值
+        elif density_strategy == 'center_focused':
+            if density_params is None:
+                # 如果没有提供任何参数，使用默认值
+                params['density_params'] = {'center_weight': 3.0, 'center_region': 0.15}
+            else:
+                # 确保 density_params 是字典且包含所有必需的键
+                if not isinstance(density_params, dict):
+                    params['density_params'] = {'center_weight': 3.0, 'center_region': 0.15}
+                else:
+                    density_params.setdefault('center_weight', 3.0)
+                    density_params.setdefault('center_region', 0.15)
+                    params['density_params'] = density_params
         
         return params
     
-    def sweep(self, param_grid, epochs=1000, save_results=True, output_dir='sweep_results'):
+    def sweep(self, param_grid, epochs=1000, save_results=True, output_dir=None):
         """
         执行参数扫描
         
@@ -218,17 +250,30 @@ class ParameterSweep:
                 'ic_weight': [100, 1000, 5000],
                 'learning_rate': [1e-4, 1e-3, 5e-3],
                 'density_strategy': ['uniform', 'center_focused'],
-                'density_params': [None, {'center_weight': 3.0, 'center_region': 0.15}]
+                'center_weight': [2.0, 3.0, 5.0],  # center_focused 策略的参数（可选）
+                'center_region': [0.1, 0.15, 0.2]  # center_focused 策略的参数（可选）
             }
-            或者使用配对方式（推荐）：
+            注意：当 density_strategy='uniform' 时，center_weight 和 center_region 会被自动忽略
+            
+            或者使用配对方式（推荐，更灵活）：
             [
                 {'ic_weight': 100, 'learning_rate': 1e-3, 'density_strategy': 'uniform', 'density_params': None},
-                {'ic_weight': 1000, 'learning_rate': 1e-3, 'density_strategy': 'center_focused', 'density_params': {'center_weight': 3.0, 'center_region': 0.15}}
+                {'ic_weight': 1000, 'learning_rate': 1e-3, 'density_strategy': 'center_focused', 
+                 'center_weight': 3.0, 'center_region': 0.15},  # 使用独立参数
+                {'ic_weight': 1000, 'learning_rate': 1e-3, 'density_strategy': 'center_focused', 
+                 'density_params': {'center_weight': 5.0, 'center_region': 0.2}}  # 或直接使用 density_params
             ]
         epochs: 每个配置的训练轮数
         save_results: 是否保存结果
-        output_dir: 结果保存目录
+        output_dir: 结果保存目录（默认：PINN/sweep_results，与 src/ 并列）
         """
+        # 设置默认输出目录（PINN/sweep_results，与 src/ 并列）
+        if output_dir is None:
+            # 从 src/sweep/ 向上两级到 PINN 目录，然后指向 sweep_results（与 src/ 并列）
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            pinn_dir = os.path.dirname(os.path.dirname(current_dir))  # src/sweep -> src -> PINN
+            output_dir = os.path.join(pinn_dir, 'sweep_results')
+        
         # 创建输出目录
         if save_results:
             os.makedirs(output_dir, exist_ok=True)
@@ -435,22 +480,27 @@ def main():
     
     # 方法1：使用参数网格（自动生成所有组合）
     # 注意：density_params会自动匹配density_strategy
+    # 可以使用独立的 center_weight 和 center_region 参数来遍历
     param_grid = {
         'ic_weight': [100, 1000, 5000],
         'learning_rate': [1e-4, 1e-3, 5e-3],
         'density_strategy': ['uniform', 'center_focused'],
+        'center_weight': [2.0, 3.0, 5.0],  # center_focused 策略的参数
+        'center_region': [0.1, 0.15, 0.2],  # center_focused 策略的参数
         'n_points': [100],
         'r_min': [0.01],
         'r_max': [20]
     }
+    # 注意：当 density_strategy='uniform' 时，center_weight 和 center_region 会被忽略
     
     # 方法2：手动指定参数组合（更灵活，推荐用于复杂场景）
+    # 可以使用独立的 center_weight 和 center_region，或直接使用 density_params
     # param_combinations = [
     #     {
     #         'ic_weight': 100,
     #         'learning_rate': 1e-3,
     #         'density_strategy': 'uniform',
-    #         'density_params': None,
+    #         'density_params': None,  # uniform 不需要参数
     #         'n_points': 100,
     #         'r_min': 0.01,
     #         'r_max': 20
@@ -459,7 +509,17 @@ def main():
     #         'ic_weight': 1000,
     #         'learning_rate': 1e-3,
     #         'density_strategy': 'center_focused',
-    #         'density_params': {'center_weight': 3.0, 'center_region': 0.15},
+    #         'center_weight': 3.0,  # 方式1：使用独立参数
+    #         'center_region': 0.15,
+    #         'n_points': 100,
+    #         'r_min': 0.01,
+    #         'r_max': 20
+    #     },
+    #     {
+    #         'ic_weight': 1000,
+    #         'learning_rate': 1e-3,
+    #         'density_strategy': 'center_focused',
+    #         'density_params': {'center_weight': 5.0, 'center_region': 0.2},  # 方式2：直接使用 density_params
     #         'n_points': 100,
     #         'r_min': 0.01,
     #         'r_max': 20
@@ -474,8 +534,8 @@ def main():
     results = sweep.sweep(
         param_grid=param_grid,
         epochs=500,  # 快速测试用500轮，实际可以更多（如2000-5000）
-        save_results=True,
-        output_dir='sweep_results'
+        save_results=True
+        # output_dir 使用默认值（PINN/sweep_results）
     )
     
     # 打印最佳结果

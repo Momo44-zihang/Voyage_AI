@@ -30,6 +30,7 @@ except ImportError:
     pass
 
 from PINN.src.models import tov_pinn
+from PINN.src.models.tov_pinn_soft import TOV_PINN_with_Soft_IC
 from PINN.src.training import train 
 from PINN.src.visualization import plot_mr
 
@@ -63,7 +64,7 @@ if __name__ == "__main__":
         use_soft_constraint = False
     elif CONSTRAINT_TYPE == 'soft':
         # 使用软约束模型（通过损失函数约束）
-        model = tov_pinn.TOV_PINN_with_Soft_IC(
+        model = TOV_PINN_with_Soft_IC(
             initial_p=10,
             initial_m=1e-10,
             r_initial=0.01

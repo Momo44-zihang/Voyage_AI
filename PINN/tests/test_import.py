@@ -1,9 +1,9 @@
 import sys
 import os
 
-# 添加父目录到路径
+# 添加父目录到路径（从 tests/ 到项目根目录需要向上三级）
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
+parent_dir = os.path.dirname(os.path.dirname(current_dir))  # tests -> PINN -> Voyage_AI
 sys.path.insert(0, parent_dir)
 
 print("Testing imports...")
