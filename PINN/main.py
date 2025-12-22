@@ -30,7 +30,6 @@ except ImportError:
     pass
 
 from PINN.src.models import tov_pinn
-from PINN.src.models.tov_pinn_soft import TOV_PINN_with_Soft_IC
 from PINN.src.training import train 
 from PINN.src.visualization import plot_mr
 
@@ -54,24 +53,14 @@ if __name__ == "__main__":
     # 创建PINN模型
     # ========================================================================
     # 初始条件：中心压强 P(0.01) = 10.0, 中心质量 M(0.01) = 1e-10
-    if CONSTRAINT_TYPE == 'hard':
-        # 使用硬约束模型（仅在初始点使用硬约束）
-        model = tov_pinn.TOV_PINN_with_IC(
-            initial_p=10,
-            initial_m=1e-10,
-            r_initial=0.01
-        )
-        use_soft_constraint = False
-    elif CONSTRAINT_TYPE == 'soft':
-        # 使用软约束模型（通过损失函数约束）
-        model = TOV_PINN_with_Soft_IC(
-            initial_p=10,
-            initial_m=1e-10,
-            r_initial=0.01
-        )
-        use_soft_constraint = True
-    else:
-        raise ValueError(f"未知的约束类型: {CONSTRAINT_TYPE}，请选择 'hard' 或 'soft'")
+    # 创建模型，根据CONSTRAINT_TYPE选择约束类型
+    use_soft_constraint = (CONSTRAINT_TYPE == 'soft')
+    model = tov_pinn.TOV_PINN_with_IC(
+        initial_p=10,
+        initial_m=1e-10,
+        r_initial=0.01,
+        use_soft_constraint=use_soft_constraint
+    )
     
     # ========================================================================
     # 训练模型 - 使用自适应密度分布

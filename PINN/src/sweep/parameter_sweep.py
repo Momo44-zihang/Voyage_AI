@@ -31,8 +31,35 @@ try:
 except ImportError:
     pass
 
+# 强制重新加载模块（确保使用最新代码）
+import importlib
+
+# 删除可能已缓存的模块，强制重新导入
+modules_to_remove = [
+    'PINN.src.models.tov_pinn',
+    'PINN.src.models',
+    'PINN.src.models.__init__'
+]
+for mod_name in modules_to_remove:
+    sys.modules.pop(mod_name, None)
+
+# 重新导入模块
 from PINN.src.models import tov_pinn
-from PINN.src.models.tov_pinn_soft import TOV_PINN_with_Soft_IC
+
+# 验证类定义是否正确
+try:
+    import inspect
+    sig = inspect.signature(tov_pinn.TOV_PINN_with_IC.__init__)
+    expected_params = ['initial_p', 'initial_m', 'r_initial', 'use_soft_constraint']
+    actual_params = list(sig.parameters.keys())
+    if not all(p in actual_params for p in expected_params):
+        print(f"警告: 类定义可能不正确。期望参数: {expected_params}, 实际参数: {actual_params}")
+        # 强制重新加载
+        if 'PINN.src.models.tov_pinn' in sys.modules:
+            importlib.reload(sys.modules['PINN.src.models.tov_pinn'])
+        from PINN.src.models import tov_pinn
+except Exception as e:
+    print(f"警告: 无法验证类定义: {e}")
 from PINN.src.training import train
 from PINN.src.physics import tov_equations
 
@@ -58,18 +85,12 @@ class ParameterSweep:
         
     def create_model(self, use_soft_constraint):
         """创建模型"""
-        if use_soft_constraint:
-            return TOV_PINN_with_Soft_IC(
-                initial_p=self.initial_p,
-                initial_m=self.initial_m,
-                r_initial=self.r_initial
-            )
-        else:
-            return tov_pinn.TOV_PINN_with_IC(
-                initial_p=self.initial_p,
-                initial_m=self.initial_m,
-                r_initial=self.r_initial
-            )
+        return tov_pinn.TOV_PINN_with_IC(
+            initial_p=self.initial_p,
+            initial_m=self.initial_m,
+            r_initial=self.r_initial,
+            use_soft_constraint=use_soft_constraint
+        )
     
     def evaluate_model(self, model, r_test=None):
         """

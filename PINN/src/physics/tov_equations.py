@@ -26,7 +26,7 @@ def compute_loss(model, r, use_soft_constraint=False, ic_weight=1000.0):
     参数:
     model: PINN模型
     r: 训练点半径，形状为 (n_points, 1)
-    use_soft_constraint: 是否使用软约束（如果模型是TOV_PINN_with_Soft_IC，应设为True）
+    use_soft_constraint: 是否使用软约束（如果模型的use_soft_constraint=True，应设为True）
     ic_weight: 初始条件损失的权重（仅在use_soft_constraint=True时使用）
     
     返回:
