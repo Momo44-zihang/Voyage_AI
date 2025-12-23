@@ -1,2 +1,0 @@
-# PINN package
-

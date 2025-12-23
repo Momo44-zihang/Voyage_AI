@@ -9,14 +9,55 @@ Created on 2025
 
 import sys
 import os
+import warnings
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import json
 import time
+import traceback
 from datetime import datetime
 from itertools import product
 import pandas as pd
+
+# 配置matplotlib中文字体
+def setup_chinese_font():
+    """设置matplotlib中文字体"""
+    # 常见的中文字体列表（按优先级排序）
+    chinese_fonts = ['SimHei', 'Microsoft YaHei', 'SimSun', 'KaiTi', 'FangSong', 
+                     'Arial Unicode MS', 'DejaVu Sans']
+    
+    # 获取系统所有可用字体
+    try:
+        from matplotlib.font_manager import FontProperties
+        available_fonts = [f.name for f in matplotlib.font_manager.fontManager.ttflist]
+        
+        # 找到第一个可用的中文字体
+        for font in chinese_fonts:
+            if font in available_fonts:
+                plt.rcParams['font.sans-serif'] = [font]
+                print(f"使用中文字体: {font}")
+                break
+        else:
+            # 如果没有找到，使用默认列表
+            plt.rcParams['font.sans-serif'] = chinese_fonts
+            print("警告: 未找到常见中文字体，使用默认字体列表")
+    except Exception as e:
+        # 如果检测失败，直接设置字体列表
+        plt.rcParams['font.sans-serif'] = chinese_fonts
+        print(f"字体检测失败，使用默认设置: {e}")
+    
+    # 解决负号显示问题
+    plt.rcParams['axes.unicode_minus'] = False
+
+# 调用字体设置函数
+setup_chinese_font()
+
+# 过滤 TensorFlow 的 warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 0=all, 1=info, 2=warnings, 3=errors
+warnings.filterwarnings('ignore', category=UserWarning, module='tensorflow')
+tf.get_logger().setLevel('ERROR')  # 只显示 ERROR 级别的日志
 
 # 添加父目录到路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,35 +72,8 @@ try:
 except ImportError:
     pass
 
-# 强制重新加载模块（确保使用最新代码）
-import importlib
-
-# 删除可能已缓存的模块，强制重新导入
-modules_to_remove = [
-    'PINN.src.models.tov_pinn',
-    'PINN.src.models',
-    'PINN.src.models.__init__'
-]
-for mod_name in modules_to_remove:
-    sys.modules.pop(mod_name, None)
-
-# 重新导入模块
+# 导入模块
 from PINN.src.models import tov_pinn
-
-# 验证类定义是否正确
-try:
-    import inspect
-    sig = inspect.signature(tov_pinn.TOV_PINN_with_IC.__init__)
-    expected_params = ['initial_p', 'initial_m', 'r_initial', 'use_soft_constraint']
-    actual_params = list(sig.parameters.keys())
-    if not all(p in actual_params for p in expected_params):
-        print(f"警告: 类定义可能不正确。期望参数: {expected_params}, 实际参数: {actual_params}")
-        # 强制重新加载
-        if 'PINN.src.models.tov_pinn' in sys.modules:
-            importlib.reload(sys.modules['PINN.src.models.tov_pinn'])
-        from PINN.src.models import tov_pinn
-except Exception as e:
-    print(f"警告: 无法验证类定义: {e}")
 from PINN.src.training import train
 from PINN.src.physics import tov_equations
 
@@ -85,12 +99,37 @@ class ParameterSweep:
         
     def create_model(self, use_soft_constraint):
         """创建模型"""
-        return tov_pinn.TOV_PINN_with_IC(
-            initial_p=self.initial_p,
-            initial_m=self.initial_m,
-            r_initial=self.r_initial,
-            use_soft_constraint=use_soft_constraint
-        )
+        try:
+            model = tov_pinn.TOV_PINN_with_IC()
+
+            # 🔑 手动挂载初始条件（属性注入）
+            model.initial_p = self.initial_p
+            model.initial_m = self.initial_m
+            model.r_initial = self.r_initial
+            model.use_soft_constraint = use_soft_constraint
+
+            return model
+        except TypeError as e:
+            # 如果出错，尝试读取源代码来验证
+            import inspect
+            try:
+                # 获取源代码
+                source = inspect.getsource(tov_pinn.TOV_PINN_with_IC.__init__)
+                print(f"\n错误详情:")
+                print(f"  类: {tov_pinn.TOV_PINN_with_IC}")
+                print(f"  模块文件: {getattr(tov_pinn, '__file__', 'unknown')}")
+                print(f"  __init__ 源代码前200字符:")
+                print(f"  {source[:200]}")
+                print(f"\n  尝试传递的参数: initial_p={self.initial_p}, initial_m={self.initial_m}, r_initial={self.r_initial}, use_soft_constraint={use_soft_constraint}")
+                # 尝试获取实际的签名
+                try:
+                    sig = inspect.signature(tov_pinn.TOV_PINN_with_IC.__init__)
+                    print(f"  实际签名: {sig}")
+                except Exception as sig_e:
+                    print(f"  无法获取签名: {sig_e}")
+            except Exception as e2:
+                print(f"  无法获取源代码: {e2}")
+            raise
     
     def evaluate_model(self, model, r_test=None):
         """
@@ -105,50 +144,77 @@ class ParameterSweep:
         """
         metrics = {}
         
-        # 1. 初始条件误差
-        r_initial_test = np.array([[self.r_initial]], dtype=np.float32)
-        predictions = model.predict(r_initial_test, verbose=0)
-        p_initial_pred = predictions[0, 0]
-        m_initial_pred = predictions[0, 1]
+        try:
+            # 1. 初始条件误差
+            r_initial_test = np.array([[self.r_initial]], dtype=np.float32)
+            predictions = model.predict(r_initial_test, verbose=0)
+            p_initial_pred = predictions[0, 0]
+            m_initial_pred = predictions[0, 1]
+            
+            # 确保转换为 Python 原生类型
+            metrics['ic_error_p'] = float(abs(p_initial_pred - self.initial_p))
+            metrics['ic_error_m'] = float(abs(m_initial_pred - self.initial_m))
+            metrics['ic_error_total'] = float(metrics['ic_error_p'] + metrics['ic_error_m'])
+            metrics['ic_error_p_rel'] = float(metrics['ic_error_p'] / self.initial_p if self.initial_p > 0 else 0)
+            metrics['ic_error_m_rel'] = float(metrics['ic_error_m'] / self.initial_m if self.initial_m > 0 else 0)
+        except Exception as e:
+            error_msg = f"评估初始条件时出错: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+            print(f"错误详情:\n{error_msg}")
+            raise RuntimeError(error_msg) from e
         
-        metrics['ic_error_p'] = abs(p_initial_pred - self.initial_p)
-        metrics['ic_error_m'] = abs(m_initial_pred - self.initial_m)
-        metrics['ic_error_total'] = metrics['ic_error_p'] + metrics['ic_error_m']
-        metrics['ic_error_p_rel'] = metrics['ic_error_p'] / self.initial_p if self.initial_p > 0 else 0
-        metrics['ic_error_m_rel'] = metrics['ic_error_m'] / self.initial_m if self.initial_m > 0 else 0
+        try:
+            # 2. TOV方程残差（在测试点上）
+            if r_test is None:
+                r_test = np.linspace(self.r_initial, 20, 50).reshape(-1, 1).astype(np.float32)
+            
+            r_test_tf = tf.convert_to_tensor(r_test, dtype=tf.float32)
+            loss = tov_equations.compute_loss(
+                model, r_test_tf,
+                use_soft_constraint=(self.constraint_type == 'soft'),
+                ic_weight=0.0  # 评估时只计算TOV损失
+            )
+            # 安全地转换为Python float：检查loss是否是tensor
+            if isinstance(loss, tf.Tensor):
+                metrics['tov_loss'] = float(loss.numpy())
+            else:
+                metrics['tov_loss'] = float(loss)
+        except Exception as e:
+            error_msg = f"计算TOV损失时出错: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+            print(f"错误详情:\n{error_msg}")
+            # 检查loss是否已定义
+            if 'loss' in locals():
+                print(f"loss类型: {type(loss)}, loss值: {loss}")
+            else:
+                print("loss变量未定义（错误发生在loss计算之前）")
+            raise RuntimeError(error_msg) from e
         
-        # 2. TOV方程残差（在测试点上）
-        if r_test is None:
-            r_test = np.linspace(self.r_initial, 20, 50).reshape(-1, 1).astype(np.float32)
-        
-        r_test_tf = tf.convert_to_tensor(r_test, dtype=tf.float32)
-        loss = tov_equations.compute_loss(
-            model, r_test_tf,
-            use_soft_constraint=(self.constraint_type == 'soft'),
-            ic_weight=0.0  # 评估时只计算TOV损失
-        )
-        metrics['tov_loss'] = float(loss.numpy())
-        
-        # 3. 预测值的合理性检查
-        predictions_all = model.predict(r_test, verbose=0)
-        p_all = predictions_all[:, 0]
-        m_all = predictions_all[:, 1]
-        
-        metrics['p_min'] = float(p_all.min())
-        metrics['p_max'] = float(p_all.max())
-        metrics['m_min'] = float(m_all.min())
-        metrics['m_max'] = float(m_all.max())
-        metrics['p_monotonic'] = self._check_monotonic(p_all)  # 压强应该单调递减
-        metrics['m_monotonic'] = self._check_monotonic(m_all, increasing=True)  # 质量应该单调递增
+        try:
+            # 3. 预测值的合理性检查
+            predictions_all = model.predict(r_test, verbose=0)
+            p_all = predictions_all[:, 0]
+            m_all = predictions_all[:, 1]
+            
+            metrics['p_min'] = float(p_all.min())
+            metrics['p_max'] = float(p_all.max())
+            metrics['m_min'] = float(m_all.min())
+            metrics['m_max'] = float(m_all.max())
+            metrics['p_monotonic'] = self._check_monotonic(p_all)  # 压强应该单调递减
+            metrics['m_monotonic'] = self._check_monotonic(m_all, increasing=True)  # 质量应该单调递增
+        except Exception as e:
+            error_msg = f"检查预测值合理性时出错: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
+            print(f"错误详情:\n{error_msg}")
+            raise RuntimeError(error_msg) from e
         
         return metrics
     
     def _check_monotonic(self, arr, increasing=False):
         """检查数组是否单调"""
         if increasing:
-            return float(np.all(np.diff(arr) >= -1e-6))  # 允许小的数值误差
+            result = np.all(np.diff(arr) >= -1e-6)  # 允许小的数值误差
+            return float(result) if isinstance(result, (np.bool_, bool)) else float(bool(result))
         else:
-            return float(np.all(np.diff(arr) <= 1e-6))
+            result = np.all(np.diff(arr) <= 1e-6)
+            return float(result) if isinstance(result, (np.bool_, bool)) else float(bool(result))
     
     def train_and_evaluate(self, params, epochs=1000, verbose=False):
         """
@@ -194,29 +260,56 @@ class ParameterSweep:
             # 计算训练时间
             training_time = time.time() - start_time
             
+            # 保存模型（如果output_dir已设置）
+            model_path = None
+            if hasattr(self, 'output_dir') and self.output_dir:
+                try:
+                    # 为每个模型创建唯一标识
+                    param_str = '_'.join([f"{k}_{v}" for k, v in sorted(params.items()) 
+                                         if k not in ['density_params']])
+                    param_str = param_str.replace('.', 'p').replace('-', 'm')[:50]  # 限制长度
+                    model_filename = f"model_{param_str}.h5"
+                    model_path = os.path.join(self.output_dir, model_filename)
+                    model.save_weights(model_path)
+                    if verbose:
+                        print(f"  模型已保存: {model_filename}")
+                except Exception as e:
+                    if verbose:
+                        print(f"  警告: 保存模型失败: {e}")
+            
             # 组合结果
             result = {
                 **params,  # 包含所有参数
                 **metrics,  # 包含所有评估指标
                 'training_time': training_time,
                 'success': True,
-                'error': None
+                'error': None,
+                'model_path': model_path  # 保存模型路径
             }
             
             if verbose:
                 print(f"✓ 完成: IC误差={metrics['ic_error_total']:.6e}, TOV损失={metrics['tov_loss']:.6e}")
             
-            return result
+            return result, model  # 同时返回结果和模型
             
         except Exception as e:
+            # 失败时返回 None 作为模型
+            # 获取完整的错误信息，包括行号和堆栈跟踪
+            error_traceback = traceback.format_exc()
+            error_msg = f"{type(e).__name__}: {str(e)}\n\n完整错误堆栈:\n{error_traceback}"
+            
             if verbose:
-                print(f"✗ 失败: {str(e)}")
-            return {
+                print(f"\n✗ 失败: {str(e)}")
+                print(f"错误类型: {type(e).__name__}")
+                print(f"完整错误信息:\n{error_traceback}")
+            
+            result = {
                 **params,
                 'success': False,
-                'error': str(e),
+                'error': error_msg,
                 'training_time': time.time() - start_time
             }
+            return result, None  # 失败时返回 None 作为模型
     
     def _validate_params(self, params):
         """验证参数组合的有效性"""
@@ -325,6 +418,8 @@ class ParameterSweep:
         
         # 遍历所有参数组合
         self.results = []
+        self.models = {}  # 保存所有模型，用于后续生成图像
+        
         for idx, params in enumerate(param_combinations, 1):
             # 验证和修正参数
             params = self._validate_params(params.copy())
@@ -334,8 +429,18 @@ class ParameterSweep:
                 if key != 'density_params' or value is not None:
                     print(f"  {key}: {value}")
             
-            result = self.train_and_evaluate(params, epochs=epochs, verbose=True)
+            result, model = self.train_and_evaluate(params, epochs=epochs, verbose=True)
             self.results.append(result)
+            
+            # 保存模型引用（仅成功的结果）
+            if result.get('success', False):
+                result_id = f"result_{idx}"
+                self.models[result_id] = {
+                    'model': model,
+                    'params': params,
+                    'metrics': {k: v for k, v in result.items() 
+                               if k not in ['model_path', 'success', 'error', 'training_time']}
+                }
             
             # 每10个组合保存一次（防止数据丢失）
             if save_results and idx % 10 == 0:
@@ -346,6 +451,8 @@ class ParameterSweep:
             self._save_results()
             self._generate_report()
             self._plot_results()
+            # 保存最佳模型的解图像（两张图：P-r 和 M-r）
+            self._plot_best_solutions()
         
         print("\n" + "=" * 70)
         print("参数扫描完成！")
@@ -353,11 +460,44 @@ class ParameterSweep:
         
         return self.results
     
+    def _convert_to_python_types(self, obj):
+        """
+        递归地将所有 numpy 和 tensorflow 类型转换为 Python 原生类型
+        以便 JSON 序列化
+        兼容 NumPy 2.0（移除了 np.float_, np.int_ 等类型）
+        """
+        # 检查是否是 NumPy 整数类型（兼容 NumPy 1.x 和 2.x）
+        if isinstance(obj, np.integer):
+            return int(obj)
+        # 检查是否是 NumPy 浮点类型（兼容 NumPy 1.x 和 2.x）
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        # 检查是否是 NumPy 布尔类型
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        # 检查是否是 NumPy 数组
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        # 检查是否是 TensorFlow Tensor
+        elif isinstance(obj, tf.Tensor):
+            return float(obj.numpy())
+        # 检查是否是字典，递归转换
+        elif isinstance(obj, dict):
+            return {key: self._convert_to_python_types(value) for key, value in obj.items()}
+        # 检查是否是列表或元组，递归转换
+        elif isinstance(obj, (list, tuple)):
+            return [self._convert_to_python_types(item) for item in obj]
+        # 其他类型直接返回
+        else:
+            return obj
+    
     def _save_results(self):
         """保存结果到JSON文件"""
         results_file = os.path.join(self.output_dir, 'results.json')
+        # 转换所有 numpy 类型为 Python 原生类型
+        converted_results = self._convert_to_python_types(self.results)
         with open(results_file, 'w', encoding='utf-8') as f:
-            json.dump(self.results, f, indent=2, ensure_ascii=False)
+            json.dump(converted_results, f, indent=2, ensure_ascii=False)
         print(f"\n结果已保存到: {results_file}")
     
     def _generate_report(self):
@@ -486,10 +626,132 @@ class ParameterSweep:
         plt.savefig(plot_file, dpi=150, bbox_inches='tight')
         print(f"可视化图表已保存到: {plot_file}")
         plt.close()
+    
+    def _plot_best_solutions(self):
+        """为最佳模型绘制并保存解的图像（P-r 和 M-r 曲线）"""
+        if not hasattr(self, 'models') or not self.models:
+            return
+        
+        successful_results = [r for r in self.results if r.get('success', False)]
+        if not successful_results:
+            return
+        
+        df = pd.DataFrame(successful_results)
+        
+        # 找到最佳配置（综合评分）
+        df['score'] = df['ic_error_total'] * 0.5 + df['tov_loss'] * 0.5
+        best_idx = df['score'].idxmin()
+        best_result = df.loc[best_idx]
+        
+        # 通过参数匹配找到对应的模型（更可靠的方法）
+        result_id = None
+        best_params = {
+            'ic_weight': best_result.get('ic_weight'),
+            'learning_rate': best_result.get('learning_rate'),
+            'density_strategy': best_result.get('density_strategy'),
+            'n_points': best_result.get('n_points'),
+            'r_min': best_result.get('r_min'),
+            'r_max': best_result.get('r_max')
+        }
+        
+        # 遍历所有模型，找到参数匹配的
+        for rid, model_info in self.models.items():
+            match = True
+            for key, value in best_params.items():
+                if value is not None:
+                    model_value = model_info['params'].get(key)
+                    # 处理浮点数比较（允许小的数值误差）
+                    if isinstance(value, float) and isinstance(model_value, float):
+                        if abs(value - model_value) > 1e-6:
+                            match = False
+                            break
+                    elif model_value != value:
+                        match = False
+                        break
+            if match:
+                result_id = rid
+                break
+        
+        # 如果参数匹配失败，尝试通过遍历所有结果找到匹配的索引
+        if result_id is None:
+            # 在 self.results 中找到最佳结果的位置
+            best_result_dict = best_result.to_dict()
+            for i, result in enumerate(self.results, 1):
+                if result.get('success', False):
+                    # 比较关键参数
+                    match = True
+                    for key in ['ic_weight', 'learning_rate', 'density_strategy', 'n_points', 'r_min', 'r_max']:
+                        if key in best_result_dict and key in result:
+                            val1 = best_result_dict[key]
+                            val2 = result[key]
+                            if isinstance(val1, float) and isinstance(val2, float):
+                                if abs(val1 - val2) > 1e-6:
+                                    match = False
+                                    break
+                            elif val1 != val2:
+                                match = False
+                                break
+                    if match:
+                        result_id = f"result_{i}"
+                        break
+        
+        if result_id in self.models:
+            model = self.models[result_id]['model']
+            
+            # 生成测试点
+            r_max = best_result.get('r_max', 20)
+            r_test = np.linspace(self.r_initial, r_max, 200).reshape(-1, 1).astype(np.float32)
+            
+            # 获取模型预测
+            predictions = model.predict(r_test, verbose=0)
+            p_pred = predictions[:, 0]  # 压强
+            m_pred = predictions[:, 1]  # 质量
+            
+            # 创建图形：两个子图
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+            
+            # 子图1: M-r 曲线（质量-半径关系）
+            ax1.plot(r_test, m_pred, 'b-', linewidth=2, label='PINN Solution')
+            ax1.set_xlabel('Radius r (km)', fontsize=12)
+            ax1.set_ylabel('Mass M (M☉)', fontsize=12)
+            ax1.set_title('TOV Equation: Mass-Radius Relation', fontsize=14, fontweight='bold')
+            ax1.grid(True, alpha=0.3)
+            ax1.legend(fontsize=10)
+            ax1.set_xlim([0, r_max])
+            
+            # 子图2: P-r 曲线（压强-半径关系）
+            ax2.plot(r_test, p_pred, 'r-', linewidth=2, label='PINN Solution')
+            ax2.set_xlabel('Radius r (km)', fontsize=12)
+            ax2.set_ylabel('Pressure P', fontsize=12)
+            ax2.set_title('TOV Equation: Pressure-Radius Relation', fontsize=14, fontweight='bold')
+            ax2.grid(True, alpha=0.3)
+            ax2.legend(fontsize=10)
+            ax2.set_xlim([0, r_max])
+            ax2.set_yscale('log')  # 使用对数刻度
+            
+            plt.tight_layout()
+            
+            solution_file = os.path.join(self.output_dir, 'best_solution.png')
+            plt.savefig(solution_file, dpi=150, bbox_inches='tight')
+            print(f"最佳解图像已保存到: {solution_file}")
+            plt.close()
+            
+            # 打印统计信息
+            print("\n" + "="*50)
+            print("最佳模型解统计信息:")
+            print("="*50)
+            print(f"半径范围: r ∈ [{self.r_initial:.2f}, {r_max:.2f}] km")
+            print(f"质量范围: M ∈ [{m_pred.min():.6f}, {m_pred.max():.6f}] M☉")
+            print(f"压强范围: P ∈ [{p_pred.min():.6e}, {p_pred.max():.6e}]")
+            print(f"中心压强: P({self.r_initial:.2f}) = {p_pred[0]:.6e}")
+            print(f"中心质量: M({self.r_initial:.2f}) = {m_pred[0]:.6e}")
+            print("="*50)
 
 
 def main():
-    """主函数：示例参数扫描"""
+    """主函数：参数扫描
+    在此处调整网格结构
+    """
     
     # 创建参数扫描器
     sweep = ParameterSweep(
@@ -499,54 +761,21 @@ def main():
         r_initial=0.01
     )
     
-    # 方法1：使用参数网格（自动生成所有组合）
+    # 使用参数网格
     # 注意：density_params会自动匹配density_strategy
     # 可以使用独立的 center_weight 和 center_region 参数来遍历
     param_grid = {
-        'ic_weight': [100, 1000, 5000],
+        'ic_weight': [1000],
         'learning_rate': [1e-4, 1e-3, 5e-3],
         'density_strategy': ['uniform', 'center_focused'],
-        'center_weight': [2.0, 3.0, 5.0],  # center_focused 策略的参数
-        'center_region': [0.1, 0.15, 0.2],  # center_focused 策略的参数
+        'center_weight': [2.0],  # center_focused 策略的参数
+        'center_region': [0.1],  # center_focused 策略的参数
         'n_points': [100],
         'r_min': [0.01],
         'r_max': [20]
     }
     # 注意：当 density_strategy='uniform' 时，center_weight 和 center_region 会被忽略
-    
-    # 方法2：手动指定参数组合（更灵活，推荐用于复杂场景）
-    # 可以使用独立的 center_weight 和 center_region，或直接使用 density_params
-    # param_combinations = [
-    #     {
-    #         'ic_weight': 100,
-    #         'learning_rate': 1e-3,
-    #         'density_strategy': 'uniform',
-    #         'density_params': None,  # uniform 不需要参数
-    #         'n_points': 100,
-    #         'r_min': 0.01,
-    #         'r_max': 20
-    #     },
-    #     {
-    #         'ic_weight': 1000,
-    #         'learning_rate': 1e-3,
-    #         'density_strategy': 'center_focused',
-    #         'center_weight': 3.0,  # 方式1：使用独立参数
-    #         'center_region': 0.15,
-    #         'n_points': 100,
-    #         'r_min': 0.01,
-    #         'r_max': 20
-    #     },
-    #     {
-    #         'ic_weight': 1000,
-    #         'learning_rate': 1e-3,
-    #         'density_strategy': 'center_focused',
-    #         'density_params': {'center_weight': 5.0, 'center_region': 0.2},  # 方式2：直接使用 density_params
-    #         'n_points': 100,
-    #         'r_min': 0.01,
-    #         'r_max': 20
-    #     },
-    #     # ... 更多组合
-    # ]
+
     
     print("开始参数扫描...")
     print("注意：这是一个示例配置，实际使用时请根据需要调整参数网格")

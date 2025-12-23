@@ -1,0 +1,86 @@
+======================================================================
+参数扫描报告
+======================================================================
+
+总实验数: 6
+成功实验数: 6
+失败实验数: 0
+
+最佳配置（按初始条件误差）:
+----------------------------------------------------------------------
+  ic_weight: 1000
+  learning_rate: 0.005
+  density_strategy: center_focused
+  n_points: 100
+  r_min: 0.01
+  r_max: 20
+  density_params: {'center_weight': 2.0, 'center_region': 0.1}
+  ic_error_p: 3.8775205612182617
+  ic_error_m: 0.11030617356300354
+  ic_error_total: 3.9878267347812653
+  ic_error_p_rel: 0.38775205612182617
+  ic_error_m_rel: 1103061735.6300354
+  tov_loss: 52345.890625
+  p_min: 0.005930643528699875
+  p_max: 6.122479438781738
+  m_min: 0.06847193837165833
+  m_max: 0.6716473698616028
+  p_monotonic: 1.0
+  m_monotonic: 0.0
+  training_time: 34.474387645721436
+  model_path: f:\Voyage_AI\PINN\sweep_results\sweep_20251223_231448\model_density_strategy_center_focused_ic_weight_1000_lea.h5
+
+最佳配置（按TOV损失）:
+----------------------------------------------------------------------
+  ic_weight: 1000
+  learning_rate: 0.0001
+  density_strategy: uniform
+  n_points: 100
+  r_min: 0.01
+  r_max: 20
+  density_params: None
+  ic_error_p: 9.303189277648926
+  ic_error_m: 0.6989494562149048
+  ic_error_total: 10.00213873386383
+  ic_error_p_rel: 0.9303189277648926
+  ic_error_m_rel: 6989494562.149048
+  tov_loss: 8449.76171875
+  p_min: 0.6628195643424988
+  p_max: 0.8321447372436523
+  m_min: 0.6989495158195496
+  m_max: 0.8575830459594727
+  p_monotonic: 0.0
+  m_monotonic: 0.0
+  training_time: 34.644439458847046
+  model_path: f:\Voyage_AI\PINN\sweep_results\sweep_20251223_231448\model_density_strategy_uniform_ic_weight_1000_learning_r.h5
+
+最佳配置（综合评分）:
+----------------------------------------------------------------------
+  ic_weight: 1000
+  learning_rate: 0.0001
+  density_strategy: uniform
+  n_points: 100
+  r_min: 0.01
+  r_max: 20
+  density_params: None
+  ic_error_p: 9.303189277648926
+  ic_error_m: 0.6989494562149048
+  ic_error_total: 10.00213873386383
+  ic_error_p_rel: 0.9303189277648926
+  ic_error_m_rel: 6989494562.149048
+  tov_loss: 8449.76171875
+  p_min: 0.6628195643424988
+  p_max: 0.8321447372436523
+  m_min: 0.6989495158195496
+  m_max: 0.8575830459594727
+  p_monotonic: 0.0
+  m_monotonic: 0.0
+  training_time: 34.644439458847046
+  model_path: f:\Voyage_AI\PINN\sweep_results\sweep_20251223_231448\model_density_strategy_uniform_ic_weight_1000_learning_r.h5
+  score: 4229.881928741932
+
+参数影响分析:
+----------------------------------------------------------------------
+  ic_weight vs IC误差相关性: nan
+  learning_rate vs IC误差相关性: -0.6418
+  n_points vs IC误差相关性: nan

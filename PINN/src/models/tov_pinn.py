@@ -24,7 +24,8 @@ class TOV_PINN_with_IC(tf.keras.Model):
             - True: 软约束，通过损失函数约束初始条件
         **kwargs: 传递给父类的其他参数
         """
-        super(TOV_PINN_with_IC, self).__init__(**kwargs)
+        # 先调用父类初始化，不传递任何参数以避免TensorFlow的签名问题
+        super(TOV_PINN_with_IC, self).__init__()
         # 创建隐藏层
         self.dense1 = tf.keras.layers.Dense(20, activation='tanh')
         self.dense2 = tf.keras.layers.Dense(20, activation='tanh')

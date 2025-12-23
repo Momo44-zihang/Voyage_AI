@@ -198,12 +198,20 @@ def train_pinn(model, epochs=1000, learning_rate=1e-3, r_min=0.01, r_max=20, n_p
     optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
     
     # 生成自适应密度的训练点
+    # 安全地获取 r_initial：检查是否是 tensor
+    r_initial_value = None
+    if hasattr(model, 'r_initial'):
+        if isinstance(model.r_initial, tf.Tensor):
+            r_initial_value = float(model.r_initial.numpy())
+        else:
+            r_initial_value = float(model.r_initial)
+    
     r_train_np = generate_adaptive_points(
         r_min=r_min,
         r_max=r_max,
         n_points=n_points,
         density_strategy=density_strategy,
-        r_initial=model.r_initial.numpy() if hasattr(model, 'r_initial') else None,
+        r_initial=r_initial_value,
         density_params=density_params
     )
     r_train = tf.convert_to_tensor(r_train_np, dtype=tf.float32)
@@ -235,10 +243,14 @@ def train_pinn(model, epochs=1000, learning_rate=1e-3, r_min=0.01, r_max=20, n_p
         optimizer.apply_gradients(zip(grads, model.trainable_variables))
         
         if epoch % 100 == 0:
-            print(f"Epoch {epoch:4d}: Loss = {loss.numpy():.6e}")
+            # 安全地转换为Python float
+            loss_value = float(loss.numpy()) if isinstance(loss, tf.Tensor) else float(loss)
+            print(f"Epoch {epoch:4d}: Loss = {loss_value:.6e}")
     
     print("-" * 50)
-    print(f"训练完成！最终损失: {loss.numpy():.6e}")
+    # 安全地转换为Python float
+    final_loss_value = float(loss.numpy()) if isinstance(loss, tf.Tensor) else float(loss)
+    print(f"训练完成！最终损失: {final_loss_value:.6e}")
     
     return r_train_np  # 返回训练点，方便后续分析
 

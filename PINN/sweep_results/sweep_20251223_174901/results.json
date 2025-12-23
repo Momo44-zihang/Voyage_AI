@@ -1,0 +1,83 @@
+[
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.0001,
+    "density_strategy": "uniform",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": null,
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.0001,
+    "density_strategy": "center_focused",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": {
+      "center_weight": 2.0,
+      "center_region": 0.1
+    },
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0009641647338867188
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.001,
+    "density_strategy": "uniform",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": null,
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0009627342224121094
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.001,
+    "density_strategy": "center_focused",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": {
+      "center_weight": 2.0,
+      "center_region": 0.1
+    },
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.005,
+    "density_strategy": "uniform",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": null,
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.005,
+    "density_strategy": "center_focused",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": {
+      "center_weight": 2.0,
+      "center_region": 0.1
+    },
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0
+  }
+]

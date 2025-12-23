@@ -1,0 +1,83 @@
+[
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.0001,
+    "density_strategy": "uniform",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": null,
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0031697750091552734
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.0001,
+    "density_strategy": "center_focused",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": {
+      "center_weight": 2.0,
+      "center_region": 0.1
+    },
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.003103494644165039
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.001,
+    "density_strategy": "uniform",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": null,
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.0032663345336914062
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.001,
+    "density_strategy": "center_focused",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": {
+      "center_weight": 2.0,
+      "center_region": 0.1
+    },
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.00453495979309082
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.005,
+    "density_strategy": "uniform",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": null,
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.003507852554321289
+  },
+  {
+    "ic_weight": 100,
+    "learning_rate": 0.005,
+    "density_strategy": "center_focused",
+    "n_points": 100,
+    "r_min": 0.01,
+    "r_max": 20,
+    "density_params": {
+      "center_weight": 2.0,
+      "center_region": 0.1
+    },
+    "success": false,
+    "error": "train_pinn() got an unexpected keyword argument 'r_min'",
+    "training_time": 0.004373311996459961
+  }
+]
